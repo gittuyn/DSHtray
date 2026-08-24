@@ -457,7 +457,7 @@ cargo test --manifest-path src-tauri/Cargo.toml targets
 - Test: `src-tauri/src/health.rs`, `src-tauri/src/network.rs`
 
 **Interfaces:**
-- `health.rs` exports `HealthChecker::check(&ServiceConfig) -> HealthResult` and `HealthResult::{Ready, Unreachable, UnexpectedStatus}`.
+- `health.rs` exports `HealthChecker::with_proxy_disabled() -> HealthChecker` and `HealthChecker::check(&self, &ServiceConfig) -> HealthResult`；`HealthResult::{Ready, Unreachable, UnexpectedStatus}`。
 - `network.rs` exports `find_listener(&ServiceConfig) -> Result<Option<ListenerOwner>, AppError>` and `ListenerOwner { pid: u32, local_address: String, port: u16 }`.
 - Test-only `TestHttpServer::responding_with(status)`, `ServiceConfig::loopback(port)` and `unused_local_port()` are defined in the health test module; production code does not expose them.
 
@@ -478,7 +478,7 @@ async fn health_check_accepts_2xx_without_using_environment_proxy() {
 #[tokio::test]
 async fn health_check_reports_unreachable_port() {
     let config = ServiceConfig::loopback(unused_local_port());
-    let result = HealthChecker::check(&config).await;
+    let result = HealthChecker::with_proxy_disabled().check(&config).await;
     assert!(matches!(result, HealthResult::Unreachable { .. }));
 }
 ```

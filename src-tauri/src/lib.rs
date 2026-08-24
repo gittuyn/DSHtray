@@ -3,6 +3,8 @@
 pub mod app_error;
 pub mod config;
 pub mod domain;
+pub mod health;
+pub mod network;
 pub mod proxy;
 pub mod targets;
 
