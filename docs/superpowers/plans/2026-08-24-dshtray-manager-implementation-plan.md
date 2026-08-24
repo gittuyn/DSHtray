@@ -410,8 +410,8 @@ fn packaged_command_uses_executable_directory_as_cwd() {
 执行：
 
 ```text
-cargo test --manifest-path src-tauri/Cargo.toml proxy
-cargo test --manifest-path src-tauri/Cargo.toml targets
+cargo test --manifest-path src-tauri/Cargo.toml --lib proxy
+cargo test --manifest-path src-tauri/Cargo.toml --lib targets
 ```
 
 预期：因函数尚未存在而失败。
@@ -438,8 +438,8 @@ working_directory: <confirmed source directory>
 
 ```text
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo test --manifest-path src-tauri/Cargo.toml proxy
-cargo test --manifest-path src-tauri/Cargo.toml targets
+cargo test --manifest-path src-tauri/Cargo.toml --lib proxy
+cargo test --manifest-path src-tauri/Cargo.toml --lib targets
 ```
 
 预期：代理变量、继承语义、源码命令和打包命令测试全部通过。
@@ -497,8 +497,8 @@ async fn health_check_reports_unreachable_port() {
 
 ```text
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo test --manifest-path src-tauri/Cargo.toml health
-cargo test --manifest-path src-tauri/Cargo.toml network
+cargo test --manifest-path src-tauri/Cargo.toml --lib health
+cargo test --manifest-path src-tauri/Cargo.toml --lib network
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
@@ -580,7 +580,7 @@ fn terminate_only_kills_processes_assigned_to_the_job() {
 执行：
 
 ```text
-cargo test --manifest-path src-tauri/Cargo.toml --test windows_process_integration -- --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml --features test-fixture --test windows_process_integration -- --nocapture
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
@@ -666,7 +666,7 @@ fn restart_uses_one_config_snapshot_for_command_and_health_url() {
 
 ```text
 cargo test --manifest-path src-tauri/Cargo.toml --test lifecycle
-cargo test --manifest-path src-tauri/Cargo.toml --all-targets
+cargo test --manifest-path src-tauri/Cargo.toml --features test-fixture --all-targets
 ```
 
 预期：状态转换、未知端口保护、5 秒停止顺序、外部观察和配置快照测试全部通过。
@@ -755,7 +755,7 @@ fn apply_proxy_change_requires_confirmation_when_running() {
 
 ```text
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo test --manifest-path src-tauri/Cargo.toml --all-targets
+cargo test --manifest-path src-tauri/Cargo.toml --features test-fixture --all-targets
 pnpm typecheck
 pnpm tauri dev
 ```
@@ -834,8 +834,8 @@ fixture 使用临时目录，不读取真实 DSH 配置，不执行 `pnpm`。
 执行：
 
 ```text
-cargo test --manifest-path src-tauri/Cargo.toml discovery
-cargo test --manifest-path src-tauri/Cargo.toml startup
+cargo test --manifest-path src-tauri/Cargo.toml --test discovery
+cargo test --manifest-path src-tauri/Cargo.toml --test autostart
 ```
 
 手工验证首次向导完成后 DSH 仍停止，注销/登录后管理器可启动但不启动 DSH。
@@ -979,9 +979,9 @@ fn self_test_reports_missing_pnpm_as_actionable_item() {
 执行：
 
 ```text
-cargo test --manifest-path src-tauri/Cargo.toml logging
-cargo test --manifest-path src-tauri/Cargo.toml diagnostics
-pnpm test -- App.test.tsx
+cargo test --manifest-path src-tauri/Cargo.toml --test logging
+cargo test --manifest-path src-tauri/Cargo.toml --test diagnostics
+pnpm test -- src/test/App.test.tsx --run
 ```
 
 手工在设置窗口点击“运行自检”和“复制诊断信息”，确认日志目录可打开、诊断文本不含环境变量 dump。
@@ -1037,8 +1037,8 @@ pnpm tauri build --no-bundle
 
 ```text
 pnpm tauri build
-pwsh -NoProfile -File scripts/package-portable.ps1 -Version 0.1.0
-pwsh -NoProfile -File scripts/verify-release.ps1 -ArtifactRoot artifacts
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1 -Version 0.1.0
+pnpm package:verify
 ```
 
 预期：NSIS setup exe 和 portable 目录都生成，发布校验退出码为 0；如果安装器需要管理员权限，必须在 README 和验收记录中如实标注，不把它描述成当前用户无 UAC 安装。
@@ -1058,7 +1058,7 @@ pwsh -NoProfile -File scripts/verify-release.ps1 -ArtifactRoot artifacts
 
 ```text
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo test --manifest-path src-tauri/Cargo.toml --all-targets
+cargo test --manifest-path src-tauri/Cargo.toml --features test-fixture --all-targets
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 pnpm typecheck
 pnpm test

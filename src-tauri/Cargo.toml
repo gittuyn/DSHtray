@@ -5,6 +5,19 @@ description = "DeepSeek Harness lifecycle and proxy manager"
 authors = ["Tony"]
 edition = "2021"
 
+[features]
+default = []
+test-fixture = []
+
+[[bin]]
+name = "dshtray"
+path = "src/main.rs"
+
+[[bin]]
+name = "dsh-test-fixture"
+path = "src/bin/dsh-test-fixture.rs"
+required-features = ["test-fixture"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
@@ -18,12 +31,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

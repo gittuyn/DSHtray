@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "preview": "vite preview",
     "tauri": "tauri",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1",
+    "package:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release.ps1"
   },
   "dependencies": {
     "react": "^19.1.0",

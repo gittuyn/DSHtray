@@ -102,6 +102,12 @@ where
         &mut self.config
     }
 
+    pub fn sync_snapshot_target(&mut self) {
+        self.snapshot.target = self.config.active_target;
+        self.snapshot.service_url = self.config.service.url();
+        self.snapshot.proxy_enabled = self.config.proxy.enabled;
+    }
+
     pub fn backend(&self) -> &P {
         &self.backend
     }

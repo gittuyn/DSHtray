@@ -12,9 +12,15 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "DSHtray",
-        "width": 800,
-        "height": 600
+        "width": 860,
+        "height": 720,
+        "minWidth": 560,
+        "minHeight": 520,
+        "resizable": true,
+        "center": true,
+        "visible": true
       }
     ],
     "security": {
@@ -30,6 +36,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

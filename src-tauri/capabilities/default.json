@@ -1,14 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Default capability for the DSHtray desktop window.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "autostart:default",
-    "clipboard-manager:default",
     "dialog:default",
     "notification:default",
+    "clipboard-manager:default",
+    "autostart:default",
     "opener:default"
   ]
 }
