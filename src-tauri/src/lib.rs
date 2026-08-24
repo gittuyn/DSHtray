@@ -56,6 +56,7 @@ pub fn run() {
                 || (!loaded.config.targets.source.is_configured()
                     && !loaded.config.targets.packaged.is_configured());
             let start_on_login = loaded.config.manager.start_on_login;
+            let start_dsh_on_login = loaded.config.manager.start_dsh_on_login;
             let lifecycle = DefaultLifecycleController::new(
                 loaded.config,
                 WindowsProcessAdapter::default(),
@@ -67,6 +68,11 @@ pub fn run() {
             autostart::reconcile_autostart(&mut autostart, start_on_login, false)
                 .map_err(std::io::Error::other)?;
             tray::setup(app)?;
+            if start_dsh_on_login {
+                let state = app.state::<AppState>();
+                commands::start_dsh(state)
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+            }
             Ok(())
         })
         .on_window_event(|window, event| {

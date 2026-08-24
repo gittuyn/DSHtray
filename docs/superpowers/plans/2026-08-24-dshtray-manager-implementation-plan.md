@@ -1061,6 +1061,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml --features test-fixture --all-targets
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 pnpm typecheck
+pnpm lint
 pnpm test
 pnpm build
 ```

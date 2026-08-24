@@ -1,9 +1,14 @@
+use crate::domain::ManagerConfig;
 use tauri::Runtime;
 use tauri_plugin_autostart::ManagerExt as TauriAutostartExt;
 
 pub trait AutostartPort {
     fn enable(&mut self) -> Result<(), String>;
     fn disable(&mut self) -> Result<(), String>;
+}
+
+pub fn should_start_dsh_on_login(manager: &ManagerConfig) -> bool {
+    manager.start_dsh_on_login
 }
 
 pub fn reconcile_autostart<P: AutostartPort>(

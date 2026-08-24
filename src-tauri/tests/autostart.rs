@@ -1,4 +1,4 @@
-use dshtray_lib::autostart::{reconcile_autostart, AutostartPort};
+use dshtray_lib::autostart::{reconcile_autostart, should_start_dsh_on_login, AutostartPort};
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -30,4 +30,17 @@ fn reconcile_disables_only_manager_autostart() {
     let mut port = FakeAutostart::default();
     reconcile_autostart(&mut port, false, true).expect("reconcile");
     assert_eq!(&*port.calls.lock().unwrap(), &["disable"]);
+}
+
+#[test]
+fn dsh_login_flag_is_independent_from_manager_autostart() {
+    let mut manager = dshtray_lib::domain::ManagerConfig {
+        start_on_login: true,
+        start_dsh_on_login: false,
+        close_to_tray: true,
+        confirm_restart_on_proxy_change: true,
+    };
+    assert!(!should_start_dsh_on_login(&manager));
+    manager.start_dsh_on_login = true;
+    assert!(should_start_dsh_on_login(&manager));
 }
