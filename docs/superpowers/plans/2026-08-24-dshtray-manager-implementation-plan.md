@@ -665,7 +665,7 @@ fn restart_uses_one_config_snapshot_for_command_and_health_url() {
 执行：
 
 ```text
-cargo test --manifest-path src-tauri/Cargo.toml lifecycle
+cargo test --manifest-path src-tauri/Cargo.toml --test lifecycle
 cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 ```
 

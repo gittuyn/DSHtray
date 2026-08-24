@@ -8,6 +8,7 @@ pub enum HealthResult {
     UnexpectedStatus { status: u16 },
 }
 
+#[derive(Clone)]
 pub struct HealthChecker {
     client: reqwest::Client,
 }

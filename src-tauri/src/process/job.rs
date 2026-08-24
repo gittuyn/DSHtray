@@ -26,6 +26,9 @@ mod platform {
         name: String,
     }
 
+    unsafe impl Send for JobOwner {}
+    unsafe impl Sync for JobOwner {}
+
     impl std::fmt::Debug for JobOwner {
         fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             formatter
