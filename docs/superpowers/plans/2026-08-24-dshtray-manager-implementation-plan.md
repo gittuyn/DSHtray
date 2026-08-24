@@ -345,8 +345,8 @@ fn save_then_load_round_trips_camel_case_json() {
 执行：
 
 ```text
-cargo fmt --all -- --check
-cargo test --manifest-path src-tauri/Cargo.toml config_store
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo test --manifest-path src-tauri/Cargo.toml --test config_store
 ```
 
 预期：格式检查通过，配置测试全部通过。
@@ -437,7 +437,7 @@ working_directory: <confirmed source directory>
 执行：
 
 ```text
-cargo fmt --all -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml proxy
 cargo test --manifest-path src-tauri/Cargo.toml targets
 ```
@@ -496,7 +496,7 @@ async fn health_check_reports_unreachable_port() {
 执行：
 
 ```text
-cargo fmt --all -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml health
 cargo test --manifest-path src-tauri/Cargo.toml network
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
@@ -754,7 +754,7 @@ fn apply_proxy_change_requires_confirmation_when_running() {
 执行：
 
 ```text
-cargo fmt --all -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 pnpm typecheck
 pnpm tauri dev
@@ -1057,7 +1057,7 @@ pwsh -NoProfile -File scripts/verify-release.ps1 -ArtifactRoot artifacts
 - [ ] **Step 1: 运行 Rust 和前端静态门禁**
 
 ```text
-cargo fmt --all -- --check
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml --all-targets
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 pnpm typecheck
