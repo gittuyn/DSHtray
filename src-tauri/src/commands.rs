@@ -147,6 +147,12 @@ pub fn guard_apply_proxy_change(
     Ok(())
 }
 
+pub fn sync_runtime_snapshot(snapshot: &mut RuntimeSnapshot, config: &AppConfig) {
+    snapshot.target = config.active_target;
+    snapshot.service_url = config.service.url();
+    snapshot.proxy_enabled = config.proxy.enabled;
+}
+
 #[tauri::command]
 pub fn get_app_state(state: State<'_, AppState>) -> Result<AppStateDto, AppError> {
     state.dto()
@@ -213,6 +219,7 @@ pub fn apply_proxy_change(
     let snapshot = lifecycle.snapshot();
     guard_apply_proxy_change(&snapshot, confirmed_restart)?;
     lifecycle.config_mut().proxy.enabled = enabled;
+    lifecycle.sync_snapshot_target();
     let result = if matches!(
         (snapshot.state, snapshot.ownership),
         (
@@ -247,6 +254,7 @@ pub fn set_active_target(
     }
     lifecycle.config_mut().active_target = target_id;
     lifecycle.config().validate_active_target()?;
+    lifecycle.sync_snapshot_target();
     let config = lifecycle.config().clone();
     let snapshot = lifecycle.snapshot();
     drop(lifecycle);
@@ -267,24 +275,27 @@ pub fn save_settings(
         .lifecycle
         .lock()
         .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
-    let config = lifecycle.config_mut();
-    if let Some(value) = settings.start_on_login {
-        config.manager.start_on_login = value;
-    }
-    if let Some(value) = settings.start_dsh_on_login {
-        config.manager.start_dsh_on_login = value;
-    }
-    if let Some(value) = settings.service_port {
-        config.service.port = value;
-    }
-    if let Some(value) = settings.proxy_enabled {
-        config.proxy.enabled = value;
-    }
-    if let Some(value) = settings.proxy_url {
-        config.proxy.url = value;
-    }
-    config.validate()?;
-    let config_snapshot = config.clone();
+    let config_snapshot = {
+        let config = lifecycle.config_mut();
+        if let Some(value) = settings.start_on_login {
+            config.manager.start_on_login = value;
+        }
+        if let Some(value) = settings.start_dsh_on_login {
+            config.manager.start_dsh_on_login = value;
+        }
+        if let Some(value) = settings.service_port {
+            config.service.port = value;
+        }
+        if let Some(value) = settings.proxy_enabled {
+            config.proxy.enabled = value;
+        }
+        if let Some(value) = settings.proxy_url {
+            config.proxy.url = value;
+        }
+        config.validate()?;
+        config.clone()
+    };
+    lifecycle.sync_snapshot_target();
     let snapshot = lifecycle.snapshot();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config_snapshot)?;

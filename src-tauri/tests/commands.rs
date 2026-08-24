@@ -1,6 +1,8 @@
 use dshtray_lib::{
-    commands::{guard_apply_proxy_change, guard_stop, prepare_proxy_change_for_test},
-    domain::{LifecycleState, Ownership, RuntimeSnapshot, TargetId},
+    commands::{
+        guard_apply_proxy_change, guard_stop, prepare_proxy_change_for_test, sync_runtime_snapshot,
+    },
+    domain::{AppConfig, LifecycleState, Ownership, RuntimeSnapshot, TargetId},
 };
 
 fn snapshot(state: LifecycleState, ownership: Ownership, proxy_enabled: bool) -> RuntimeSnapshot {
@@ -63,4 +65,19 @@ fn confirmed_proxy_change_is_allowed_for_adopted_process() {
         true,
     )
     .expect("confirmed restart");
+}
+
+#[test]
+fn stopped_runtime_snapshot_tracks_saved_config_changes() {
+    let mut config = AppConfig::defaults();
+    config.active_target = TargetId::Packaged;
+    config.service.port = 3180;
+    config.proxy.enabled = false;
+    let mut runtime = snapshot(LifecycleState::Stopped, Ownership::None, true);
+
+    sync_runtime_snapshot(&mut runtime, &config);
+
+    assert_eq!(runtime.target, TargetId::Packaged);
+    assert_eq!(runtime.service_url, "http://127.0.0.1:3180");
+    assert!(!runtime.proxy_enabled);
 }

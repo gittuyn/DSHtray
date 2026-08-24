@@ -20,6 +20,7 @@ enum LaunchMode {
     NoSpawn,
     Hanging,
     External,
+    ListenerError,
 }
 
 struct FakeJob {
@@ -85,6 +86,13 @@ impl FakeAdapter {
             ..Self::ready()
         }
     }
+
+    fn listener_error() -> Self {
+        Self {
+            mode: LaunchMode::ListenerError,
+            ..Self::ready()
+        }
+    }
 }
 
 impl ProcessAdapter for FakeAdapter {
@@ -92,6 +100,12 @@ impl ProcessAdapter for FakeAdapter {
         &mut self,
         _: &ServiceConfig,
     ) -> Result<Option<ListenerOwner>, dshtray_lib::app_error::AppError> {
+        if matches!(self.mode, LaunchMode::ListenerError) {
+            return Err(dshtray_lib::app_error::AppError::new(
+                "listener_query_failed",
+                "fixture listener query failed",
+            ));
+        }
         Ok(self.listener.clone())
     }
 
@@ -241,6 +255,16 @@ fn unknown_listener_enters_port_conflict_without_killing_pid() {
         .expect_err("unknown listener must block start");
     assert_eq!(error.code, "port_conflict");
     assert_eq!(controller.backend().terminate_calls, 0);
+}
+
+#[test]
+fn listener_query_failure_does_not_launch_a_new_dsh() {
+    let mut controller = controller_with(FakeAdapter::listener_error(), FakeHealth::ready());
+    let error = controller
+        .start()
+        .expect_err("listener query failure must block start");
+    assert_eq!(error.code, "listener_query_failed");
+    assert_eq!(controller.backend().launches, 0);
 }
 
 #[test]

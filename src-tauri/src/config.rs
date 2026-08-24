@@ -97,6 +97,47 @@ fn backup_corrupt_file(path: &Path) -> Result<PathBuf, AppError> {
     Ok(backup)
 }
 
+#[cfg(windows)]
+fn replace_file(temp: &Path, destination: &Path) -> Result<(), AppError> {
+    if !destination.exists() {
+        fs::rename(temp, destination)?;
+        return Ok(());
+    }
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{
+        core::PCWSTR,
+        Win32::Storage::FileSystem::{ReplaceFileW, REPLACE_FILE_FLAGS},
+    };
+    let destination_wide: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let temp_wide: Vec<u16> = temp
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    unsafe {
+        ReplaceFileW(
+            PCWSTR(destination_wide.as_ptr()),
+            PCWSTR(temp_wide.as_ptr()),
+            None,
+            REPLACE_FILE_FLAGS(0),
+            None,
+            None,
+        )
+    }
+    .map_err(|error| {
+        AppError::with_details(
+            "config_replace_failed",
+            "无法原子替换配置",
+            error.to_string(),
+        )
+    })
+}
+
+#[cfg(not(windows))]
 fn replace_file(temp: &Path, destination: &Path) -> Result<(), AppError> {
     if destination.exists() {
         fs::remove_file(destination)?;

@@ -141,7 +141,7 @@ where
         self.config.validate_active_target()?;
         let target_id = self.config.active_target;
         let target = self.config.active_target_config().clone();
-        let listener = self.take_listener();
+        let listener = self.take_listener()?;
         if let Some(listener) = listener {
             if let Ok(identity) = self.backend.inspect(listener.pid) {
                 if identity_matches(&target, &identity) {
@@ -328,14 +328,10 @@ where
         error
     }
 
-    fn take_listener(&mut self) -> Option<ListenerOwner> {
+    fn take_listener(&mut self) -> Result<Option<ListenerOwner>, AppError> {
         match self.listener_override.take() {
-            Some(listener) => listener,
-            None => self
-                .backend
-                .find_listener(&self.config.service)
-                .ok()
-                .flatten(),
+            Some(listener) => Ok(listener),
+            None => self.backend.find_listener(&self.config.service),
         }
     }
 }
