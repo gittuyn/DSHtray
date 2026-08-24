@@ -3,6 +3,8 @@
 pub mod app_error;
 pub mod config;
 pub mod domain;
+pub mod proxy;
+pub mod targets;
 
 pub fn run() {
     tauri::Builder::default()
