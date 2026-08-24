@@ -1,8 +1,8 @@
 # DSHtray 验收记录
 
-- 日期：2026-08-24 23:00（中国标准时间）
+- 日期：2026-08-25 00:40（中国标准时间）
 - 平台：Windows 11 主机（`tauri info` 报告 Windows 10.0.26200 build）
-- 提交：`5a76bef` 实现、`2278360` 前端 lint、`0429a8b` 状态/端口安全修复；`startDshOnLogin` 修复待本次提交
+- 提交：包含 `5a76bef`、`2278360`、`0429a8b`、`0c7ab7a` 及本次无黑框/托盘图标修复
 
 ## 自动化结果
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | Rust 格式 | 通过 | `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` |
 | Rust Clippy | 通过 | `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings` |
-| Rust 测试 | 通过 | `--features test-fixture --all-targets`：13 个 lib 单元测试 + 30 个集成/平台测试，全部通过 |
+| Rust 测试 | 通过 | `--features test-fixture --all-targets`：13 个 lib 单元测试 + 33 个集成/平台测试，全部通过；新增无黑框和蓝/黑图标测试 |
 | 前端类型 | 通过 | `pnpm typecheck` |
 | 前端 lint | 通过 | `pnpm lint` |
 | 前端测试 | 通过 | `pnpm test`：3 个 Vitest 测试通过 |
@@ -23,8 +23,8 @@ Rust 测试覆盖：配置损坏恢复/camelCase、代理继承策略、源码/�
 
 | 产物 | 路径 | 大小 | SHA-256 |
 |---|---|---:|---|
-| 绿色版 | `artifacts/portable/DSHtray/DSHtray.exe` | 13,818,880 bytes | `861b36cdc39a22546cc731a55a4a8a4aee6412b2298d5a86ae21db1714456a1b` |
-| NSIS 安装器 | `src-tauri/target/release/bundle/nsis/DSHtray_0.1.0_x64-setup.exe` | 3,342,659 bytes | `8ca09ddc9fec8476706b6c18aa81dd87b6335358412f2b40d796f850af945082` |
+| 绿色版 | `artifacts/portable/DSHtray/DSHtray.exe` | 14,014,464 bytes | `0743c141c2106bc1fd81c95f963195be42462e579f3c0967ddee68a296a0b5dc` |
+| NSIS 安装器 | `src-tauri/target/release/bundle/nsis/DSHtray_0.1.0_x64-setup.exe` | 3,377,228 bytes | `ec0428000eadca976d86ea7deeafba10ce6e8c0835f6d6eb7569a4bd15b62e58` |
 
 `pnpm package:portable` 和 `pnpm package:verify` 均实际执行成功。当前产物签名状态为 `NotSigned`，因为没有配置代码签名证书；正式发布前需要组织签名流程。
 

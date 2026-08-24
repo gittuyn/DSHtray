@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "lint": "eslint .",
+    "fetch:tray-icons": "node scripts/fetch-tray-icons.mjs",
     "package:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1",
     "package:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release.ps1"
   },
@@ -28,6 +29,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6",
     "@testing-library/react": "^16",

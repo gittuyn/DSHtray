@@ -1,3 +1,4 @@
+use crate::process_flags::windows_creation_flags;
 use crate::{
     app_error::AppError,
     domain::{
@@ -453,7 +454,7 @@ impl WindowsProcessAdapter {
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
-            process.creation_flags(0x0000_0200);
+            process.creation_flags(windows_creation_flags());
         }
         let child = process.spawn().map_err(|error| {
             AppError::with_details("launch_failed", "无法启动 DSH 目标", error.to_string())

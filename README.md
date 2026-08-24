@@ -19,6 +19,19 @@ DSHtray 是 DeepSeek Harness 的 Windows 托盘管理器。它只管理一个 DS
 - 停止流程先请求正常退出并等待 5 秒；只有已确认归属的 Job Object 进程树才会强制终止。
 - 服务地址第一版只允许 `127.0.0.1` 或 `localhost`。
 
+## 托盘图标和进程窗口
+
+- 代理关闭时使用 DeepSeek 蓝色托盘图标。
+- 代理开启时使用 DeepSeek 黑色托盘图标。
+- 图标由 `scripts/fetch-tray-icons.mjs` 从 Simple Icons 下载并转换为内置 PNG；运行时不依赖网络。
+- DSH 源码/打包目标使用 Windows `CREATE_NO_WINDOW` 启动，不显示控制台黑框。
+
+刷新图标资源：
+
+```text
+pnpm fetch:tray-icons
+```
+
 ## 构建
 
 要求：Windows 11、Rust MSVC、Visual Studio C++ Build Tools、Node.js 和 pnpm。

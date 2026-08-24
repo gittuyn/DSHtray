@@ -14,9 +14,11 @@ pub mod lifecycle;
 pub mod logging;
 pub mod network;
 pub mod process;
+pub mod process_flags;
 pub mod proxy;
 pub mod targets;
 pub mod tray;
+pub mod tray_assets;
 
 use app_state::AppState;
 use commands::{
@@ -57,6 +59,7 @@ pub fn run() {
                     && !loaded.config.targets.packaged.is_configured());
             let start_on_login = loaded.config.manager.start_on_login;
             let start_dsh_on_login = loaded.config.manager.start_dsh_on_login;
+            let proxy_enabled = loaded.config.proxy.enabled;
             let lifecycle = DefaultLifecycleController::new(
                 loaded.config,
                 WindowsProcessAdapter::default(),
@@ -67,7 +70,7 @@ pub fn run() {
             let mut autostart = autostart::TauriAutostart { app };
             autostart::reconcile_autostart(&mut autostart, start_on_login, false)
                 .map_err(std::io::Error::other)?;
-            tray::setup(app)?;
+            tray::setup(app, proxy_enabled)?;
             if start_dsh_on_login {
                 let state = app.state::<AppState>();
                 commands::start_dsh(state)

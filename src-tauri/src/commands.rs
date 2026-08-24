@@ -9,6 +9,7 @@ use crate::{
         TargetConfig, TargetId, TargetsConfig,
     },
     lifecycle::DefaultLifecycleController,
+    tray,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
@@ -209,6 +210,7 @@ pub fn prepare_proxy_change(
 #[tauri::command]
 pub fn apply_proxy_change(
     state: State<'_, AppState>,
+    app: AppHandle,
     enabled: bool,
     confirmed_restart: bool,
 ) -> Result<RuntimeSnapshot, AppError> {
@@ -234,6 +236,9 @@ pub fn apply_proxy_change(
     let config = lifecycle.config().clone();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config)?;
+    tray::sync_icon(&app, enabled).map_err(|error| {
+        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
+    })?;
     Ok(result)
 }
 
@@ -269,6 +274,7 @@ pub fn set_active_target(
 #[tauri::command]
 pub fn save_settings(
     state: State<'_, AppState>,
+    app: AppHandle,
     settings: SettingsPatch,
 ) -> Result<AppStateDto, AppError> {
     let mut lifecycle = state
@@ -299,6 +305,9 @@ pub fn save_settings(
     let snapshot = lifecycle.snapshot();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config_snapshot)?;
+    tray::sync_icon(&app, config_snapshot.proxy.enabled).map_err(|error| {
+        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
+    })?;
     state.mark_configured();
     Ok(AppStateDto::from_controller(
         &config_snapshot,
@@ -369,6 +378,7 @@ pub fn scan_targets(state: State<'_, AppState>) -> Result<Vec<DiscoveredTarget>,
 #[tauri::command]
 pub fn complete_first_run(
     state: State<'_, AppState>,
+    app: AppHandle,
     setup: FirstRunSetup,
 ) -> Result<AppStateDto, AppError> {
     let mut lifecycle = state
@@ -395,6 +405,9 @@ pub fn complete_first_run(
     let snapshot = lifecycle.snapshot();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config_snapshot)?;
+    tray::sync_icon(&app, config_snapshot.proxy.enabled).map_err(|error| {
+        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
+    })?;
     state.mark_configured();
     Ok(AppStateDto::from_controller(
         &config_snapshot,
