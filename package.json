@@ -9,7 +9,7 @@
     "build:desktop": "pnpm tauri build",
     "build:portable": "pnpm tauri build --no-bundle",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --passWithNoTests && node --test scripts/tray-icon-outline.node-test.mjs",
     "test:watch": "vitest",
     "preview": "vite preview",
     "tauri": "tauri",

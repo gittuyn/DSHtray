@@ -10,7 +10,7 @@ use crate::{
     process::{
         graceful_stop::GracefulStop,
         inspect::{ProcessIdentity, ProcessInspector},
-        job::JobOwner,
+        job::{JobOwner, PidTreeOwner},
     },
     proxy::build_child_environment,
     targets::{build_packaged_command, build_source_command, TargetCommand},
@@ -19,7 +19,7 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     process::{Child, Command, Stdio},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 
 pub trait JobControl: Send {
@@ -36,6 +36,27 @@ pub struct LaunchedProcess {
 pub trait ProcessAdapter: Send {
     fn find_listener(&mut self, config: &ServiceConfig) -> Result<Option<ListenerOwner>, AppError>;
     fn inspect(&mut self, pid: u32) -> Result<ProcessIdentity, AppError>;
+    fn inspect_chain(&mut self, pid: u32) -> Result<Vec<ProcessIdentity>, AppError> {
+        let mut chain = Vec::new();
+        let mut current = Some(pid);
+        let mut seen = std::collections::HashSet::new();
+        while let Some(current_pid) = current {
+            if current_pid == 0 || !seen.insert(current_pid) || chain.len() >= 32 {
+                break;
+            }
+            let identity = match self.inspect(current_pid) {
+                Ok(identity) => identity,
+                Err(error) if chain.is_empty() => return Err(error),
+                Err(_) => break,
+            };
+            current = identity.parent_pid;
+            chain.push(identity);
+        }
+        Ok(chain)
+    }
+    fn is_process_in_job(&mut self, _pid: u32) -> Result<bool, AppError> {
+        Ok(false)
+    }
     fn launch(
         &mut self,
         target: &TargetConfig,
@@ -43,6 +64,9 @@ pub trait ProcessAdapter: Send {
         environment: &[(OsString, OsString)],
     ) -> Result<LaunchedProcess, AppError>;
     fn adopt(&mut self, pid: u32) -> Result<LaunchedProcess, AppError>;
+    fn adopt_tree(&mut self, pid: u32, _process_ids: &[u32]) -> Result<LaunchedProcess, AppError> {
+        self.adopt(pid)
+    }
     fn is_alive(&mut self, pid: u32) -> bool;
     fn request_graceful_stop(&mut self, process_group_id: u32);
 }
@@ -67,6 +91,8 @@ where
     clock: C,
     snapshot: RuntimeSnapshot,
     process: Option<LaunchedProcess>,
+    external_root_pid: Option<u32>,
+    external_process_ids: Vec<u32>,
     listener_override: Option<Option<ListenerOwner>>,
     generation: u64,
 }
@@ -86,6 +112,8 @@ where
             clock,
             snapshot,
             process: None,
+            external_root_pid: None,
+            external_process_ids: Vec::new(),
             listener_override: None,
             generation: 0,
         }
@@ -143,9 +171,14 @@ where
         let target_id = self.config.active_target;
         let target = self.config.active_target_config().clone();
         let listener = self.take_listener()?;
+        self.external_root_pid = None;
+        self.external_process_ids.clear();
         if let Some(listener) = listener {
-            if let Ok(identity) = self.backend.inspect(listener.pid) {
-                if identity_matches(&target, &identity) {
+            let chain = self.backend.inspect_chain(listener.pid).ok();
+            if let Some(chain) = chain.as_deref() {
+                if let Some(root_pid) = target_root_pid(&target, chain) {
+                    self.external_root_pid = Some(root_pid);
+                    self.external_process_ids = chain_pids_to_root(chain, root_pid);
                     self.snapshot = RuntimeSnapshot {
                         state: LifecycleState::External,
                         target: target_id,
@@ -251,7 +284,12 @@ where
             elapsed += Duration::from_millis(100);
         }
         if !process.job.is_empty() {
-            process.job.terminate()?;
+            if let Err(error) = process.job.terminate() {
+                self.snapshot.state = LifecycleState::Failed;
+                self.snapshot.last_error = Some(error.clone());
+                self.process = Some(process);
+                return Err(error);
+            }
         }
         let mut force_elapsed = Duration::ZERO;
         while force_elapsed < Duration::from_secs(5) && !process.job.is_empty() {
@@ -262,16 +300,58 @@ where
             let error = AppError::new("stop_timeout", "强制停止 DSH 进程树超时");
             self.snapshot.state = LifecycleState::Failed;
             self.snapshot.last_error = Some(error.clone());
+            self.process = Some(process);
+            return Err(error);
+        }
+        if let Err(error) = self.wait_for_listener_to_clear() {
+            self.process = Some(process);
             return Err(error);
         }
         self.snapshot = RuntimeSnapshot::stopped(&self.config);
         Ok(self.snapshot())
     }
 
+    fn wait_for_listener_to_clear(&mut self) -> Result<(), AppError> {
+        for _ in 0..50 {
+            match self.backend.find_listener(&self.config.service)? {
+                None => return Ok(()),
+                Some(_) => self.clock.sleep(Duration::from_millis(100)),
+            }
+        }
+        let error = AppError::new("stop_timeout", "等待 DSH 服务端口释放超时");
+        self.snapshot.state = LifecycleState::Failed;
+        self.snapshot.last_error = Some(error.clone());
+        Err(error)
+    }
+
     pub fn restart(&mut self) -> Result<RuntimeSnapshot, AppError> {
         let config_snapshot = self.config.clone();
         if self.snapshot.state != LifecycleState::Stopped {
-            self.stop()?;
+            match self.snapshot.ownership {
+                Ownership::Managed | Ownership::Adopted => {
+                    self.stop()?;
+                }
+                Ownership::External => {
+                    return Err(AppError::new(
+                        "external_not_adopted",
+                        "外部 DSH 尚未被用户确认接管",
+                    ));
+                }
+                Ownership::None => {
+                    let refreshed = self.refresh_external_state()?;
+                    if refreshed.state == LifecycleState::External {
+                        return Err(AppError::new(
+                            "external_not_adopted",
+                            "外部 DSH 尚未被用户确认接管",
+                        ));
+                    }
+                    if refreshed.state != LifecycleState::Stopped {
+                        return Err(refreshed.last_error.unwrap_or_else(|| {
+                            AppError::new("restart_not_ready", "DSH 当前状态不允许重启")
+                        }));
+                    }
+                }
+            }
         }
         self.config = config_snapshot;
         self.start()
@@ -280,24 +360,29 @@ where
     pub fn refresh_external_state(&mut self) -> Result<RuntimeSnapshot, AppError> {
         let listener = self.backend.find_listener(&self.config.service)?;
         let Some(listener) = listener else {
+            self.external_root_pid = None;
+            self.external_process_ids.clear();
             self.snapshot = RuntimeSnapshot::stopped(&self.config);
             return Ok(self.snapshot());
         };
         let target = self.config.active_target_config();
-        let identity = self.backend.inspect(listener.pid).ok();
-        if identity
-            .as_ref()
-            .is_some_and(|identity| identity_matches(target, identity))
-        {
-            self.snapshot.state = LifecycleState::External;
-            self.snapshot.target = self.config.active_target;
-            self.snapshot.pid = Some(listener.pid);
-            self.snapshot.ownership = Ownership::External;
-            self.snapshot.service_url = self.config.service.url();
-            self.snapshot.proxy_enabled = self.config.proxy.enabled;
-            self.snapshot.last_error = None;
-            return Ok(self.snapshot());
+        let chain = self.backend.inspect_chain(listener.pid).ok();
+        if let Some(chain) = chain.as_deref() {
+            if let Some(root_pid) = target_root_pid(target, chain) {
+                self.external_root_pid = Some(root_pid);
+                self.external_process_ids = chain_pids_to_root(chain, root_pid);
+                self.snapshot.state = LifecycleState::External;
+                self.snapshot.target = self.config.active_target;
+                self.snapshot.pid = Some(listener.pid);
+                self.snapshot.ownership = Ownership::External;
+                self.snapshot.service_url = self.config.service.url();
+                self.snapshot.proxy_enabled = self.config.proxy.enabled;
+                self.snapshot.last_error = None;
+                return Ok(self.snapshot());
+            }
         }
+        self.external_root_pid = None;
+        self.external_process_ids.clear();
         let error = AppError::with_details(
             "port_conflict",
             "服务端口已被未知进程占用",
@@ -312,11 +397,30 @@ where
         if self.snapshot.ownership != Ownership::External {
             return Err(AppError::new("external_not_found", "没有可接管的外部 DSH"));
         }
+        let refreshed = self.refresh_external_state()?;
+        if refreshed.state != LifecycleState::External {
+            return Err(refreshed.last_error.unwrap_or_else(|| {
+                AppError::new("external_not_found", "外部 DSH 已退出或状态已变化")
+            }));
+        }
         let pid = self
-            .snapshot
-            .pid
+            .external_root_pid
+            .or(self.snapshot.pid)
             .ok_or_else(|| AppError::new("external_pid_missing", "外部 DSH PID 不可用"))?;
-        self.process = Some(self.backend.adopt(pid)?);
+        let mut process_ids = self.external_process_ids.clone();
+        if !process_ids.contains(&pid) {
+            process_ids.push(pid);
+        }
+        let adopted = match self.backend.adopt_tree(pid, &process_ids) {
+            Ok(process) => process,
+            Err(error) => {
+                self.snapshot.last_error = Some(error.clone());
+                return Err(error);
+            }
+        };
+        self.process = Some(adopted);
+        self.external_root_pid = None;
+        self.external_process_ids.clear();
         self.snapshot.ownership = Ownership::Adopted;
         self.snapshot.state = LifecycleState::Running;
         Ok(self.snapshot())
@@ -337,23 +441,77 @@ where
     }
 }
 
-fn identity_matches(target: &TargetConfig, identity: &ProcessIdentity) -> bool {
+fn target_root_pid(target: &TargetConfig, chain: &[ProcessIdentity]) -> Option<u32> {
     match target.kind {
-        TargetKind::Packaged => {
-            normalize_path(&target.executable) == normalize_path(&identity.executable)
-        }
+        TargetKind::Packaged => chain
+            .iter()
+            .find(|identity| {
+                normalize_path(&target.executable) == normalize_path(&identity.executable)
+            })
+            .map(|identity| identity.pid),
         TargetKind::Source => {
-            let command_line = identity
-                .command_line
-                .as_deref()
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let root = normalize_path(&target.working_directory).to_ascii_lowercase();
-            command_line.contains(&root)
-                && command_line.contains("dsh")
-                && command_line.contains("web")
+            let root = normalize_path(&target.working_directory);
+            let source_matches = |identity: &ProcessIdentity| {
+                let command_line = identity
+                    .command_line
+                    .as_deref()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .replace('\\', "/");
+                let working_directory_matches = identity
+                    .working_directory
+                    .as_deref()
+                    .is_some_and(|path| path_is_same_or_descendant(path, &root));
+                let entrypoint =
+                    command_line.contains("apps/cli/src/bin.ts") && command_line.contains("web");
+                let launcher = command_line.contains("pnpm")
+                    && command_line.contains("dsh")
+                    && command_line.contains("web");
+                working_directory_matches && (entrypoint || launcher)
+            };
+            chain
+                .iter()
+                .rev()
+                .find(|identity| {
+                    let command_line = identity
+                        .command_line
+                        .as_deref()
+                        .unwrap_or_default()
+                        .to_ascii_lowercase();
+                    identity
+                        .working_directory
+                        .as_deref()
+                        .is_some_and(|path| normalize_path(path) == root)
+                        && command_line.contains("pnpm")
+                        && command_line.contains("dsh")
+                        && command_line.contains("web")
+                })
+                .or_else(|| chain.iter().rev().find(|identity| source_matches(identity)))
+                .map(|identity| identity.pid)
         }
     }
+}
+
+fn chain_pids_to_root(chain: &[ProcessIdentity], root_pid: u32) -> Vec<u32> {
+    let Some(root_index) = chain.iter().position(|identity| identity.pid == root_pid) else {
+        return vec![root_pid];
+    };
+    chain[..=root_index]
+        .iter()
+        .rev()
+        .map(|identity| identity.pid)
+        .collect()
+}
+
+fn unique_process_ids(root_pid: u32, process_ids: &[u32]) -> Vec<u32> {
+    let mut unique = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for process_id in process_ids.iter().copied().chain(std::iter::once(root_pid)) {
+        if process_id != 0 && seen.insert(process_id) {
+            unique.push(process_id);
+        }
+    }
+    unique
 }
 
 fn normalize_path(path: &std::path::Path) -> String {
@@ -369,6 +527,14 @@ fn normalize_path(path: &std::path::Path) -> String {
     normalized
 }
 
+fn path_is_same_or_descendant(path: &std::path::Path, root: &str) -> bool {
+    let normalized = normalize_path(path);
+    normalized == root
+        || normalized
+            .strip_prefix(root)
+            .is_some_and(|suffix| suffix.starts_with('\\'))
+}
+
 struct WindowsJobControl(JobOwner);
 
 impl JobControl for WindowsJobControl {
@@ -381,9 +547,40 @@ impl JobControl for WindowsJobControl {
     }
 }
 
-#[derive(Default)]
+struct WindowsPidTreeControl(PidTreeOwner);
+
+impl JobControl for WindowsPidTreeControl {
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn terminate(&mut self) -> Result<(), AppError> {
+        self.0.terminate()
+    }
+}
+
 pub struct WindowsProcessAdapter {
     children: HashMap<u32, Child>,
+    manager_job_name: String,
+}
+
+impl Default for WindowsProcessAdapter {
+    fn default() -> Self {
+        Self::with_job_name(MANAGED_JOB_NAME)
+    }
+}
+
+impl WindowsProcessAdapter {
+    pub fn with_job_name(name: impl Into<String>) -> Self {
+        Self {
+            children: HashMap::new(),
+            manager_job_name: name.into(),
+        }
+    }
+
+    fn manager_job(&self) -> Result<JobOwner, AppError> {
+        JobOwner::create_or_open(&self.manager_job_name)
+    }
 }
 
 impl ProcessAdapter for WindowsProcessAdapter {
@@ -393,6 +590,14 @@ impl ProcessAdapter for WindowsProcessAdapter {
 
     fn inspect(&mut self, pid: u32) -> Result<ProcessIdentity, AppError> {
         ProcessInspector::inspect(pid)
+    }
+
+    fn is_process_in_job(&mut self, pid: u32) -> Result<bool, AppError> {
+        let manager_job = self.manager_job()?;
+        if manager_job.process_ids()?.contains(&pid) {
+            return Ok(false);
+        }
+        JobOwner::is_process_in_job(pid)
     }
 
     fn launch(
@@ -409,8 +614,37 @@ impl ProcessAdapter for WindowsProcessAdapter {
     }
 
     fn adopt(&mut self, pid: u32) -> Result<LaunchedProcess, AppError> {
-        let job = new_job(pid)?;
-        job.assign(pid)?;
+        self.adopt_tree(pid, &[pid])
+    }
+
+    fn adopt_tree(&mut self, pid: u32, process_ids: &[u32]) -> Result<LaunchedProcess, AppError> {
+        let unique_process_ids = unique_process_ids(pid, process_ids);
+        let job = self.manager_job()?;
+        let manager_process_ids = job.process_ids()?;
+        let mut external_job_found = false;
+        for process_id in unique_process_ids.iter().copied() {
+            if manager_process_ids.contains(&process_id) {
+                continue;
+            }
+            if JobOwner::is_process_in_job(process_id)? {
+                external_job_found = true;
+                break;
+            }
+        }
+        if external_job_found {
+            return self.adopt_with_pid_control(pid, &unique_process_ids);
+        }
+        for process_id in unique_process_ids {
+            if manager_process_ids.contains(&process_id) {
+                continue;
+            }
+            if let Err(error) = job.assign(process_id) {
+                if matches!(JobOwner::is_process_in_job(process_id), Ok(true)) {
+                    return self.adopt_with_pid_control(pid, process_ids);
+                }
+                return Err(error);
+            }
+        }
         Ok(LaunchedProcess {
             pid,
             process_group_id: pid,
@@ -438,6 +672,31 @@ impl ProcessAdapter for WindowsProcessAdapter {
 }
 
 impl WindowsProcessAdapter {
+    fn adopt_with_pid_control(
+        &self,
+        pid: u32,
+        process_ids: &[u32],
+    ) -> Result<LaunchedProcess, AppError> {
+        let unique_process_ids = unique_process_ids(pid, process_ids);
+        let processes = unique_process_ids
+            .into_iter()
+            .map(|process_id| {
+                ProcessInspector::inspect(process_id).map_err(|error| {
+                    AppError::with_details(
+                        "external_process_recheck_failed",
+                        "无法重新确认外部 DSH 进程，未建立强制控制",
+                        format!("pid={process_id}; {error}"),
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(LaunchedProcess {
+            pid,
+            process_group_id: pid,
+            job: Box::new(WindowsPidTreeControl(PidTreeOwner::new(pid, processes))),
+        })
+    }
+
     fn spawn_command(
         &mut self,
         command: TargetCommand,
@@ -460,7 +719,7 @@ impl WindowsProcessAdapter {
             AppError::with_details("launch_failed", "无法启动 DSH 目标", error.to_string())
         })?;
         let pid = child.id();
-        let job = new_job(pid)?;
+        let job = self.manager_job()?;
         job.assign(pid)?;
         self.children.insert(pid, child);
         Ok(LaunchedProcess {
@@ -471,13 +730,7 @@ impl WindowsProcessAdapter {
     }
 }
 
-fn new_job(pid: u32) -> Result<JobOwner, AppError> {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    JobOwner::create_or_open(format!("Local\\DeepSeekHarnessManager-{}-{}", pid, stamp))
-}
+const MANAGED_JOB_NAME: &str = "Local\\DeepSeekHarnessManager";
 
 #[derive(Clone)]
 pub struct BlockingHealthAdapter {

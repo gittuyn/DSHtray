@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { Resvg } from "@resvg/resvg-js";
+
+import { addHairlineOutline, padSvgViewBox } from "./tray-icon-outline.mjs";
 
 const icons = [
   {
@@ -10,6 +12,14 @@ const icons = [
   {
     name: "tray-deepseek-black.png",
     url: "https://cdn.simpleicons.org/deepseek/000000",
+  },
+  {
+    name: "tray-deepseek-red.png",
+    url: "https://cdn.simpleicons.org/deepseek/DC2626",
+  },
+  {
+    name: "tray-deepseek-yellow.png",
+    url: "https://cdn.simpleicons.org/deepseek/EAB308",
   },
 ];
 
@@ -21,13 +31,12 @@ for (const icon of icons) {
   if (!response.ok) {
     throw new Error(`Failed to download ${icon.url}: HTTP ${response.status}`);
   }
-  const svg = await response.text();
+  const svg = padSvgViewBox(addHairlineOutline(await response.text()));
   const png = new Resvg(svg, {
-    fitTo: { mode: "width", value: 32 },
+    fitTo: { mode: "width", value: 64 },
     background: "rgba(0, 0, 0, 0)",
   }).render().asPng();
   const output = resolve(outputDirectory, icon.name);
-  await mkdir(dirname(output), { recursive: true });
   await writeFile(output, png);
   console.log(`Wrote ${output}`);
 }

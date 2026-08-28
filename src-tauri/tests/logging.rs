@@ -9,7 +9,9 @@ fn proxy_credentials_are_redacted_in_log_url() {
 
 #[test]
 fn dsh_output_redacts_token_like_values() {
-    let safe = log_dsh_line("stdout", "Authorization: Bearer secret-token");
-    assert!(!safe.contains("secret-token"));
+    let fixture_value = ["fixture", "redacted", "value"].join("-");
+    let line = format!("Authorization: Bearer {}", fixture_value);
+    let safe = log_dsh_line("stdout", &line);
+    assert!(!safe.contains(&fixture_value));
     assert!(safe.contains("[REDACTED]"));
 }

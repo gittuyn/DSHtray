@@ -59,21 +59,26 @@ pub fn run() {
                     && !loaded.config.targets.packaged.is_configured());
             let start_on_login = loaded.config.manager.start_on_login;
             let start_dsh_on_login = loaded.config.manager.start_dsh_on_login;
-            let proxy_enabled = loaded.config.proxy.enabled;
-            let lifecycle = DefaultLifecycleController::new(
+            let mut lifecycle = DefaultLifecycleController::new(
                 loaded.config,
                 WindowsProcessAdapter::default(),
                 BlockingHealthAdapter::default(),
                 RealClock,
             );
+            if !first_run {
+                lifecycle
+                    .refresh_external_state()
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+            }
+            let initial_runtime = lifecycle.snapshot();
             app.manage(AppState::new(lifecycle, config_path, first_run));
             let mut autostart = autostart::TauriAutostart { app };
             autostart::reconcile_autostart(&mut autostart, start_on_login, false)
                 .map_err(std::io::Error::other)?;
-            tray::setup(app, proxy_enabled)?;
+            tray::setup(app, &initial_runtime)?;
             if start_dsh_on_login {
                 let state = app.state::<AppState>();
-                commands::start_dsh(state)
+                commands::start_dsh(state, app.handle().clone())
                     .map_err(|error| std::io::Error::other(error.to_string()))?;
             }
             Ok(())

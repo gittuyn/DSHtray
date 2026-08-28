@@ -44,7 +44,9 @@ dd { margin: 0; color: #e7edf2; font-family: "IBM Plex Mono", monospace; font-si
 .notice p { margin: 4px 0 0; color: #d8bd7e; font-size: 13px; }
 .notice button { background: #f3c66f; }
 .error-text, .error-banner { color: #ffb8bd; }
-.error-banner { position: fixed; right: 18px; bottom: 18px; display: flex; gap: 10px; align-items: center; max-width: min(560px, calc(100vw - 36px)); padding: 13px 15px; border: 1px solid #9c4d53; background: #321e24; border-radius: 12px; box-shadow: 0 8px 30px #0007; }
+.error-banner { position: fixed; right: 18px; bottom: 18px; display: flex; gap: 10px; align-items: flex-start; max-width: min(560px, calc(100vw - 36px)); padding: 13px 15px; border: 1px solid #9c4d53; background: #321e24; border-radius: 12px; box-shadow: 0 8px 30px #0007; }
+.error-banner__body { display: grid; gap: 4px; min-width: 0; }
+.error-banner__body small { color: #d9aeb1; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .error-banner button { background: transparent; color: #ffb8bd; padding: 0 4px; font-size: 18px; }
 .wizard { margin-top: 15px; }
 .wizard > p:not(.eyebrow) { color: #b8c8ce; line-height: 1.6; }

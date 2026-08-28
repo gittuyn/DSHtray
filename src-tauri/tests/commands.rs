@@ -30,6 +30,17 @@ fn stop_rejects_unadopted_external_process() {
 }
 
 #[test]
+fn stop_reports_port_conflict_instead_of_not_running() {
+    let error = guard_stop(&snapshot(
+        LifecycleState::PortConflict,
+        Ownership::None,
+        true,
+    ))
+    .expect_err("a port conflict must not be reported as not running");
+    assert_eq!(error.code, "port_conflict");
+}
+
+#[test]
 fn proxy_change_plan_requires_restart_only_for_managed_running_dsh() {
     let plan = prepare_proxy_change_for_test(
         &snapshot(LifecycleState::Running, Ownership::Managed, true),

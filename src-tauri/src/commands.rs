@@ -12,7 +12,7 @@ use crate::{
     tray,
 };
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,6 +95,12 @@ pub fn guard_stop(snapshot: &RuntimeSnapshot) -> Result<(), AppError> {
             "外部 DSH 尚未被用户确认接管",
         ));
     }
+    if snapshot.state == LifecycleState::PortConflict {
+        return Err(AppError::new(
+            "port_conflict",
+            "服务端口已被占用，未执行停止或终止操作",
+        ));
+    }
     if snapshot.state == LifecycleState::Stopped {
         return Ok(());
     }
@@ -154,41 +160,111 @@ pub fn sync_runtime_snapshot(snapshot: &mut RuntimeSnapshot, config: &AppConfig)
     snapshot.proxy_enabled = config.proxy.enabled;
 }
 
+fn sync_tray_icon<R: Runtime>(
+    app: &AppHandle<R>,
+    snapshot: &RuntimeSnapshot,
+) -> Result<(), AppError> {
+    tray::sync_icon(app, snapshot).map_err(|error| {
+        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
+    })
+}
+
 #[tauri::command]
 pub fn get_app_state(state: State<'_, AppState>) -> Result<AppStateDto, AppError> {
     state.dto()
 }
 
 #[tauri::command]
-pub fn start_dsh(state: State<'_, AppState>) -> Result<RuntimeSnapshot, AppError> {
-    let mut lifecycle = state
-        .lifecycle
-        .lock()
-        .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
-    let snapshot = lifecycle.start()?;
-    let config = lifecycle.config().clone();
-    drop(lifecycle);
+pub fn start_dsh(state: State<'_, AppState>, app: AppHandle) -> Result<RuntimeSnapshot, AppError> {
+    start_dsh_with_app(state, &app)
+}
+
+pub(crate) fn start_dsh_with_app<R: Runtime>(
+    state: State<'_, AppState>,
+    app: &AppHandle<R>,
+) -> Result<RuntimeSnapshot, AppError> {
+    let (result, config, current_snapshot) = {
+        let mut lifecycle = state
+            .lifecycle
+            .lock()
+            .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
+        let result = lifecycle.start();
+        let config = lifecycle.config().clone();
+        let current_snapshot = lifecycle.snapshot();
+        (result, config, current_snapshot)
+    };
+    let snapshot = match result {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let _ = sync_tray_icon(app, &current_snapshot);
+            return Err(error);
+        }
+    };
     ConfigStore::save(state.config_path(), &config)?;
+    sync_tray_icon(app, &snapshot)?;
     Ok(snapshot)
 }
 
 #[tauri::command]
-pub fn stop_dsh(state: State<'_, AppState>) -> Result<RuntimeSnapshot, AppError> {
-    let mut lifecycle = state
-        .lifecycle
-        .lock()
-        .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
-    guard_stop(&lifecycle.snapshot())?;
-    lifecycle.stop()
+pub fn stop_dsh(state: State<'_, AppState>, app: AppHandle) -> Result<RuntimeSnapshot, AppError> {
+    stop_dsh_with_app(state, &app)
+}
+
+pub(crate) fn stop_dsh_with_app<R: Runtime>(
+    state: State<'_, AppState>,
+    app: &AppHandle<R>,
+) -> Result<RuntimeSnapshot, AppError> {
+    let (result, current_snapshot) = {
+        let mut lifecycle = state
+            .lifecycle
+            .lock()
+            .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
+        guard_stop(&lifecycle.snapshot())?;
+        let result = lifecycle.stop();
+        let current_snapshot = lifecycle.snapshot();
+        (result, current_snapshot)
+    };
+    let snapshot = match result {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let _ = sync_tray_icon(app, &current_snapshot);
+            return Err(error);
+        }
+    };
+    sync_tray_icon(app, &snapshot)?;
+    Ok(snapshot)
 }
 
 #[tauri::command]
-pub fn restart_dsh(state: State<'_, AppState>) -> Result<RuntimeSnapshot, AppError> {
-    let mut lifecycle = state
-        .lifecycle
-        .lock()
-        .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
-    lifecycle.restart()
+pub fn restart_dsh(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<RuntimeSnapshot, AppError> {
+    restart_dsh_with_app(state, &app)
+}
+
+pub(crate) fn restart_dsh_with_app<R: Runtime>(
+    state: State<'_, AppState>,
+    app: &AppHandle<R>,
+) -> Result<RuntimeSnapshot, AppError> {
+    let (result, current_snapshot) = {
+        let mut lifecycle = state
+            .lifecycle
+            .lock()
+            .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
+        let result = lifecycle.restart();
+        let current_snapshot = lifecycle.snapshot();
+        (result, current_snapshot)
+    };
+    let snapshot = match result {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let _ = sync_tray_icon(app, &current_snapshot);
+            return Err(error);
+        }
+    };
+    sync_tray_icon(app, &snapshot)?;
+    Ok(snapshot)
 }
 
 #[tauri::command]
@@ -236,9 +312,7 @@ pub fn apply_proxy_change(
     let config = lifecycle.config().clone();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config)?;
-    tray::sync_icon(&app, enabled).map_err(|error| {
-        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
-    })?;
+    sync_tray_icon(&app, &result)?;
     Ok(result)
 }
 
@@ -305,9 +379,7 @@ pub fn save_settings(
     let snapshot = lifecycle.snapshot();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config_snapshot)?;
-    tray::sync_icon(&app, config_snapshot.proxy.enabled).map_err(|error| {
-        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
-    })?;
+    sync_tray_icon(&app, &snapshot)?;
     state.mark_configured();
     Ok(AppStateDto::from_controller(
         &config_snapshot,
@@ -317,22 +389,45 @@ pub fn save_settings(
 }
 
 #[tauri::command]
-pub fn adopt_external_dsh(state: State<'_, AppState>) -> Result<RuntimeSnapshot, AppError> {
-    let mut lifecycle = state
-        .lifecycle
-        .lock()
-        .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
-    lifecycle.adopt_external()
+pub fn adopt_external_dsh(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<RuntimeSnapshot, AppError> {
+    let (result, current_snapshot) = {
+        let mut lifecycle = state
+            .lifecycle
+            .lock()
+            .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
+        let result = lifecycle.adopt_external();
+        let current_snapshot = lifecycle.snapshot();
+        (result, current_snapshot)
+    };
+    let snapshot = match result {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let _ = sync_tray_icon(&app, &current_snapshot);
+            return Err(error);
+        }
+    };
+    sync_tray_icon(&app, &snapshot)?;
+    Ok(snapshot)
 }
 
 #[tauri::command]
 pub fn open_dsh_url(state: State<'_, AppState>, app: AppHandle) -> Result<(), AppError> {
+    open_dsh_url_with_app(state, &app)
+}
+
+pub(crate) fn open_dsh_url_with_app<R: Runtime>(
+    state: State<'_, AppState>,
+    app: &AppHandle<R>,
+) -> Result<(), AppError> {
     let lifecycle = state
         .lifecycle
         .lock()
         .map_err(|_| AppError::new("state_lock_poisoned", "管理器状态锁已损坏"))?;
     let url = lifecycle.config().service.url();
-    tauri_plugin_opener::OpenerExt::opener(&app)
+    tauri_plugin_opener::OpenerExt::opener(app)
         .open_url(url, None::<String>)
         .map_err(|error| {
             AppError::with_details("open_url_failed", "无法打开 DSH 页面", error.to_string())
@@ -405,9 +500,7 @@ pub fn complete_first_run(
     let snapshot = lifecycle.snapshot();
     drop(lifecycle);
     ConfigStore::save(state.config_path(), &config_snapshot)?;
-    tray::sync_icon(&app, config_snapshot.proxy.enabled).map_err(|error| {
-        AppError::with_details("tray_icon_failed", "无法更新托盘图标", error.to_string())
-    })?;
+    sync_tray_icon(&app, &snapshot)?;
     state.mark_configured();
     Ok(AppStateDto::from_controller(
         &config_snapshot,

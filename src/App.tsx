@@ -74,6 +74,11 @@ export default function App({ initialState }: { initialState?: AppStateDto }) {
       updateRuntime(await operation());
     } catch (cause) {
       setError(toError(cause));
+      try {
+        updateRuntime((await api.getAppState()).runtime);
+      } catch {
+        // Preserve the original lifecycle error when reconciliation also fails.
+      }
     }
   };
 
@@ -164,7 +169,7 @@ export default function App({ initialState }: { initialState?: AppStateDto }) {
           </section>
         </div>
       )}
-      {error && <div className="error-banner" role="alert"><strong>{error.code}</strong><span>{error.message}</span><button type="button" onClick={() => setError(null)} aria-label="关闭错误">×</button></div>}
+      {error && <div className="error-banner" role="alert"><strong>{error.code}</strong><div className="error-banner__body"><span>{error.message}</span>{error.details && <small>{error.details}</small>}</div><button type="button" onClick={() => setError(null)} aria-label="关闭错误">×</button></div>}
     </main>
   );
 }

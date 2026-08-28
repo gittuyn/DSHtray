@@ -10,7 +10,11 @@ const { mockApi, mockSubscribeState } = vi.hoisted(() => ({
     prepareProxyChange: vi.fn(),
     applyProxyChange: vi.fn(),
     completeFirstRun: vi.fn(),
-    startDsh: vi.fn(),  },
+    adoptExternalDsh: vi.fn(),
+    startDsh: vi.fn(),
+    stopDsh: vi.fn(),
+    restartDsh: vi.fn(),
+  },
   mockSubscribeState: vi.fn().mockResolvedValue(() => undefined),
 }));
 
@@ -77,6 +81,73 @@ describe("DSHtray App", () => {
     await userEvent.click(screen.getByRole("switch", { name: "使用代理" }));
     expect(await screen.findByText("需要重启 DSH，当前会话可能中断")).toBeVisible();
     expect(mockApi.applyProxyChange).not.toHaveBeenCalled();
+  });
+
+  it("refreshes runtime after a failed lifecycle action", async () => {
+    mockApi.restartDsh.mockRejectedValue({
+      code: "port_conflict",
+      message: "服务端口已被未知进程占用，未执行停止或终止操作",
+    });
+    mockApi.getAppState.mockResolvedValue(
+      state({
+        runtime: {
+          ...state().runtime,
+          state: "portConflict",
+          lastError: {
+            code: "port_conflict",
+            message: "服务端口已被未知进程占用，未执行停止或终止操作",
+          },
+        },
+      }),
+    );
+    render(
+      <App
+        initialState={state({
+          runtime: {
+            ...state().runtime,
+            state: "running",
+            ownership: "managed",
+            pid: 21420,
+          },
+        })}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "重启 DSH" }));
+
+    expect(await screen.findByText("端口冲突")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("port_conflict");
+    expect(mockApi.getAppState).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows direct PID control after adopting a Job-owned external DSH", async () => {
+    mockApi.adoptExternalDsh.mockResolvedValue(
+      state({
+        runtime: {
+          ...state().runtime,
+          state: "running",
+          ownership: "adopted",
+          pid: 4012,
+        },
+      }).runtime,
+    );
+    render(
+      <App
+        initialState={state({
+          runtime: {
+            ...state().runtime,
+            state: "external",
+            ownership: "external",
+            pid: 4012,
+          },
+        })}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "确认接管" }));
+
+    expect(await screen.findByText("已接管")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "确认接管" })).not.toBeInTheDocument();
   });
 
   it("does not auto-start after first-run wizard submission", async () => {
