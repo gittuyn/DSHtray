@@ -1,6 +1,6 @@
 use dshtray_lib::{
     config::ConfigStore,
-    domain::{AppConfig, TargetId},
+    domain::{AppConfig, TargetConfig, TargetId},
 };
 
 #[test]
@@ -42,6 +42,42 @@ fn empty_default_target_is_allowed_until_first_run_is_completed() {
         .validate_active_target()
         .expect_err("active source target still needs a path");
     assert_eq!(error.code, "target_not_configured");
+}
+
+#[test]
+fn stale_inactive_packaged_target_does_not_block_config_load() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let mut config = AppConfig::defaults();
+    config.active_target = TargetId::Source;
+    config.targets.source = TargetConfig::source("valid source", dir.path().to_path_buf());
+    config.targets.packaged =
+        TargetConfig::packaged("stale packaged", dir.path().join("missing").join("DSH.exe"));
+    let path = dir.path().join("config.json");
+    std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&config).expect("serialize config"),
+    )
+    .expect("write config");
+
+    let loaded = ConfigStore::load(&path).expect("inactive stale target must not block load");
+
+    assert_eq!(loaded.config.active_target, TargetId::Source);
+    assert_eq!(loaded.config.targets.source, config.targets.source);
+}
+
+#[test]
+fn active_packaged_target_still_requires_an_existing_executable() {
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let mut config = AppConfig::defaults();
+    config.active_target = TargetId::Packaged;
+    config.targets.packaged =
+        TargetConfig::packaged("missing packaged", dir.path().join("DSH.exe"));
+
+    let error = config
+        .validate_active_target()
+        .expect_err("active packaged target must be valid before use");
+
+    assert_eq!(error.code, "invalid_packaged_executable");
 }
 
 #[test]

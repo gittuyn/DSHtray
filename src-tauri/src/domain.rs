@@ -174,8 +174,7 @@ impl AppConfig {
             ));
         }
         validate_proxy_url(&self.proxy.url)?;
-        validate_target(&self.targets.source)?;
-        validate_target(&self.targets.packaged)?;
+        validate_target(self.active_target_config())?;
         Ok(())
     }
 
