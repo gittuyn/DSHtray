@@ -30,7 +30,37 @@ use config::ConfigStore;
 use lifecycle::{
     BlockingHealthAdapter, DefaultLifecycleController, RealClock, WindowsProcessAdapter,
 };
+use std::time::Duration;
 use tauri::{Manager, WindowEvent};
+
+const RUNTIME_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
+
+fn spawn_runtime_monitor(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    let _ = std::thread::Builder::new()
+        .name("dshtray-runtime-monitor".into())
+        .spawn(move || loop {
+            std::thread::sleep(RUNTIME_REFRESH_INTERVAL);
+            let state = handle.state::<AppState>();
+            let refreshed = {
+                let Ok(mut lifecycle) = state.lifecycle.lock() else {
+                    continue;
+                };
+                let previous = lifecycle.snapshot();
+                let Ok(snapshot) = lifecycle.refresh_runtime_state() else {
+                    continue;
+                };
+                (previous != snapshot, snapshot)
+            };
+            if !refreshed.0 {
+                continue;
+            }
+            let _ = tray::sync_icon(&handle, &refreshed.1);
+            if let Ok(dto) = state.dto() {
+                let _ = events::emit_state_changed(&handle, &dto);
+            }
+        });
+}
 
 pub fn run() {
     tauri::Builder::default()
@@ -81,6 +111,7 @@ pub fn run() {
                 commands::start_dsh(state, app.handle().clone())
                     .map_err(|error| std::io::Error::other(error.to_string()))?;
             }
+            spawn_runtime_monitor(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {

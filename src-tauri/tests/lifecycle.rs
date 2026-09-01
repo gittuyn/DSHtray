@@ -17,6 +17,7 @@ use std::{collections::HashSet, ffi::OsString, path::PathBuf, time::Duration};
 #[derive(Clone, Copy)]
 enum LaunchMode {
     Ready,
+    Exited,
     NoSpawn,
     Hanging,
     TerminateError,
@@ -83,6 +84,13 @@ impl FakeAdapter {
     fn no_spawn() -> Self {
         Self {
             mode: LaunchMode::NoSpawn,
+            ..Self::ready()
+        }
+    }
+
+    fn exited() -> Self {
+        Self {
+            mode: LaunchMode::Exited,
             ..Self::ready()
         }
     }
@@ -265,12 +273,12 @@ impl ProcessAdapter for FakeAdapter {
             TargetKind::Source => TargetId::Source,
             TargetKind::Packaged => TargetId::Packaged,
         });
-        self.alive = true;
+        self.alive = !matches!(self.mode, LaunchMode::Exited);
         Ok(LaunchedProcess {
             pid: 9001 + self.launches as u32,
             process_group_id: 9001 + self.launches as u32,
             job: Box::new(FakeJob {
-                empty: false,
+                empty: matches!(self.mode, LaunchMode::Exited),
                 terminate_calls: 0,
                 termination_error: matches!(self.mode, LaunchMode::TerminateError).then(|| {
                     dshtray_lib::app_error::AppError::new(
@@ -384,6 +392,20 @@ fn start_transitions_stopped_to_starting_to_running() {
     assert_eq!(controller.snapshot().state, LifecycleState::Stopped);
     controller.start().expect("start fake target");
     assert_eq!(controller.snapshot().state, LifecycleState::Running);
+}
+
+#[test]
+fn runtime_refresh_marks_managed_dsh_stopped_after_owned_tree_exits() {
+    let mut controller = controller_with(FakeAdapter::exited(), FakeHealth::ready());
+    controller.start().expect("start fake target");
+
+    let snapshot = controller
+        .refresh_runtime_state()
+        .expect("refresh managed runtime state");
+
+    assert_eq!(snapshot.state, LifecycleState::Stopped);
+    assert_eq!(snapshot.ownership, Ownership::None);
+    assert_eq!(snapshot.pid, None);
 }
 
 #[test]

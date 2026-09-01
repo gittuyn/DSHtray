@@ -393,6 +393,41 @@ where
         Ok(self.snapshot())
     }
 
+    pub fn refresh_runtime_state(&mut self) -> Result<RuntimeSnapshot, AppError> {
+        if matches!(
+            self.snapshot.ownership,
+            Ownership::Managed | Ownership::Adopted
+        ) && !matches!(
+            self.snapshot.state,
+            LifecycleState::Starting | LifecycleState::Stopping
+        ) {
+            let listener = self.backend.find_listener(&self.config.service)?;
+            if listener.is_some() {
+                return Ok(self.snapshot());
+            }
+
+            let root_pid = self
+                .process
+                .as_ref()
+                .map(|process| process.pid)
+                .or(self.snapshot.pid);
+            let root_alive = root_pid.is_some_and(|pid| self.backend.is_alive(pid));
+            let tree_empty = self
+                .process
+                .as_ref()
+                .is_none_or(|process| process.job.is_empty());
+            if !root_alive && tree_empty {
+                self.process = None;
+                self.external_root_pid = None;
+                self.external_process_ids.clear();
+                self.snapshot = RuntimeSnapshot::stopped(&self.config);
+            }
+            return Ok(self.snapshot());
+        }
+
+        self.refresh_external_state()
+    }
+
     pub fn adopt_external(&mut self) -> Result<RuntimeSnapshot, AppError> {
         if self.snapshot.ownership != Ownership::External {
             return Err(AppError::new("external_not_found", "没有可接管的外部 DSH"));
