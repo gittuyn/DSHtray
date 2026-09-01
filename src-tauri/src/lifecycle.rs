@@ -708,8 +708,8 @@ impl WindowsProcessAdapter {
         process.envs(environment.iter().cloned());
         process
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -773,3 +773,66 @@ impl Clock for RealClock {
 
 pub type DefaultLifecycleController =
     LifecycleController<WindowsProcessAdapter, BlockingHealthAdapter, RealClock>;
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use std::{
+        ffi::OsString,
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+        thread,
+        time::{Duration, Instant},
+    };
+
+    fn unique_job_name() -> String {
+        static NEXT_JOB_ID: AtomicU64 = AtomicU64::new(0);
+        format!(
+            "Local\\DeepSeekHarnessManager-stdio-test-{}-{}",
+            std::process::id(),
+            NEXT_JOB_ID.fetch_add(1, Ordering::Relaxed),
+        )
+    }
+
+    #[test]
+    fn managed_child_output_does_not_block_after_pipe_buffer_fills() {
+        let mut adapter = WindowsProcessAdapter::with_job_name(unique_job_name());
+        let launched = adapter
+            .spawn_command(
+                TargetCommand {
+                    program: PathBuf::from("cmd.exe"),
+                    args: vec![
+                        OsString::from("/d"),
+                        OsString::from("/c"),
+                        OsString::from("for /L %i in (1,1,100000) do @echo dsh-output"),
+                    ],
+                    working_directory: std::env::current_dir().expect("current directory"),
+                },
+                &[],
+            )
+            .expect("spawn output fixture");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut exited = false;
+        while Instant::now() < deadline {
+            let child = adapter
+                .children
+                .get_mut(&launched.pid)
+                .expect("retain launched child");
+            if child
+                .try_wait()
+                .expect("query output fixture state")
+                .is_some()
+            {
+                exited = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        let mut job = launched.job;
+        if !exited {
+            let _ = job.terminate();
+        }
+        assert!(exited, "child output must not block the managed process");
+    }
+}
