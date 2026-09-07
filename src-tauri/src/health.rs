@@ -39,7 +39,7 @@ impl HealthChecker {
         match self.client.get(url).send().await {
             Ok(response) => {
                 let status = response.status().as_u16();
-                if (200..400).contains(&status) {
+                if (200..400).contains(&status) || matches!(status, 401 | 403) {
                     HealthResult::Ready { status }
                 } else {
                     HealthResult::UnexpectedStatus { status }
@@ -145,6 +145,14 @@ mod tests {
         let config = ServiceConfig::loopback(server.port());
         let result = HealthChecker::with_proxy_disabled().check(&config).await;
         assert!(matches!(result, HealthResult::Ready { status: 301 }));
+    }
+
+    #[tokio::test]
+    async fn health_check_accepts_auth_required_service_as_ready() {
+        let server = TestHttpServer::responding_with(401).await;
+        let config = ServiceConfig::loopback(server.port());
+        let result = HealthChecker::with_proxy_disabled().check(&config).await;
+        assert!(matches!(result, HealthResult::Ready { status: 401 }));
     }
 
     #[tokio::test]
