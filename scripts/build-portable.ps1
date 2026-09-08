@@ -8,7 +8,7 @@ try {
     Copy-Item "src-tauri\target\release\dshtray.exe" (Join-Path $portable "DSHtray.exe") -Force
     Copy-Item "README.md" (Join-Path $portable "README.md") -Force
     $hash = Get-FileHash (Join-Path $portable "DSHtray.exe") -Algorithm SHA256
-    "{0}  {1}" -f $hash.Hash.ToLowerInvariant(), $hash.Path | Set-Content (Join-Path $portable "SHA256SUMS.txt") -Encoding utf8
+    "{0}  DSHtray.exe" -f $hash.Hash.ToLowerInvariant() | Set-Content (Join-Path $portable "SHA256SUMS.txt") -Encoding utf8
     Write-Host "Portable package: $portable"
 } finally {
     Pop-Location
