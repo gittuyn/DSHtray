@@ -1,6 +1,6 @@
 [package]
 name = "dshtray"
-version = "0.1.0"
+version = "0.1.1"
 description = "DeepSeek Harness lifecycle and proxy manager"
 authors = ["Tony"]
 edition = "2021"

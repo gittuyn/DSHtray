@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $exe = Join-Path $root "src-tauri\target\release\dshtray.exe"
-$installer = Join-Path $root "src-tauri\target\release\bundle\nsis\DSHtray_0.1.0_x64-setup.exe"
+$installer = Join-Path $root "src-tauri\target\release\bundle\nsis\DSHtray_0.1.1_x64-setup.exe"
 foreach ($path in @($exe, $installer)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing artifact: $path" }
     $file = Get-Item -LiteralPath $path

@@ -66,7 +66,7 @@ Release 使用 `opt-level = "z"`、Thin LTO、单 codegen unit、`panic = "abort
 ## 交付物
 
 - 绿色版：`src-tauri/target/release/dshtray.exe`
-- NSIS 安装器：`src-tauri/target/release/bundle/nsis/DSHtray_0.1.0_x64-setup.exe`
+- NSIS 安装器：`src-tauri/target/release/bundle/nsis/DSHtray_0.1.1_x64-setup.exe`
 - 绿色版复制脚本：`scripts/build-portable.ps1`
 - 产物校验脚本：`scripts/verify-release.ps1`
 
