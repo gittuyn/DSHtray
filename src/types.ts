@@ -61,6 +61,7 @@ export interface AppStateDto {
   serviceHost: string;
   servicePort: number;
   proxy: ProxyConfig;
+  dshVersion: string | null;
 }
 
 export interface ProxyChangePlan {

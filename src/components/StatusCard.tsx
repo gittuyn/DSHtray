@@ -10,7 +10,7 @@ const stateLabels: Record<RuntimeSnapshot["state"], string> = {
   portConflict: "端口冲突",
 };
 
-export function StatusCard({ snapshot, url }: { snapshot: RuntimeSnapshot; url: string }) {
+export function StatusCard({ snapshot, url, version }: { snapshot: RuntimeSnapshot; url: string; version: string | null }) {
   return (
     <section className="card status-card" aria-labelledby="status-heading">
       <div className="status-card__header">
@@ -27,6 +27,7 @@ export function StatusCard({ snapshot, url }: { snapshot: RuntimeSnapshot; url: 
         <div><dt>目标</dt><dd>{snapshot.target === "source" ? "源码模式" : "DSH.exe"}</dd></div>
         <div><dt>进程 PID</dt><dd>{snapshot.pid ?? "—"}</dd></div>
         <div><dt>归属</dt><dd>{snapshot.ownership === "external" ? "外部观察" : snapshot.ownership === "adopted" ? "已接管" : snapshot.ownership === "managed" ? "管理器负责" : "—"}</dd></div>
+        <div><dt>DSH 版本</dt><dd>{version ?? "未知"}</dd></div>
       </dl>
       {snapshot.lastError && <p className="error-text">{snapshot.lastError.message}</p>}
     </section>

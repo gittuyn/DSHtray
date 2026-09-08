@@ -139,7 +139,7 @@ export default function App({ initialState }: { initialState?: AppStateDto }) {
         />
       ) : (
         <>
-          <StatusCard snapshot={appState.runtime} url={appState.runtime.serviceUrl} />
+          <StatusCard snapshot={appState.runtime} url={appState.runtime.serviceUrl} version={appState.dshVersion} />
           <ExternalDshBanner snapshot={appState.runtime} onAdopt={() => void api.adoptExternalDsh().then(updateRuntime).catch((cause) => setError(toError(cause)))} />
           <ActionBar
             state={appState.runtime.state}

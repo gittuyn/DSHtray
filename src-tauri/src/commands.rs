@@ -25,6 +25,7 @@ pub struct AppStateDto {
     pub service_host: String,
     pub service_port: u16,
     pub proxy: ProxyConfig,
+    pub dsh_version: Option<String>,
 }
 
 impl AppStateDto {
@@ -38,6 +39,7 @@ impl AppStateDto {
             service_host: config.service.host.clone(),
             service_port: config.service.port,
             proxy: config.proxy.clone(),
+            dsh_version: crate::version::read_target_version(config.active_target_config()),
         }
     }
 }

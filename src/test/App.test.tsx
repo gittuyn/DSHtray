@@ -28,6 +28,7 @@ function state(overrides: Partial<AppStateDto> = {}): AppStateDto {
     servicePort: 3080,
     manager: { startOnLogin: true, startDshOnLogin: false, closeToTray: true },
     proxy: { enabled: true, url: "http://127.0.0.1:7897" },
+    dshVersion: "0.1.2-rc.1",
     targets: {
       source: { label: "源码", kind: "source", workingDirectory: "", command: "pnpm", arguments: ["dsh", "web"], executable: "" },
       packaged: { label: "DSH.exe", kind: "packaged", workingDirectory: "", command: "", arguments: [], executable: "" },
@@ -56,6 +57,7 @@ describe("DSHtray App", () => {
     mockApi.getAppState.mockResolvedValue(state());
     render(<App />);
     expect(await screen.findByText("已停止")).toBeVisible();
+    expect(screen.getByText("0.1.2-rc.1")).toBeVisible();
     expect(screen.getByRole("button", { name: "启动 DSH" })).toBeEnabled();
   });
 

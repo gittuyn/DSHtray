@@ -19,6 +19,7 @@ pub mod proxy;
 pub mod targets;
 pub mod tray;
 pub mod tray_assets;
+pub mod version;
 
 use app_state::AppState;
 use commands::{
